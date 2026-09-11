@@ -1,0 +1,271 @@
+# mb-tools —— 《骑马与砍杀2：霸主》资产包（`.tpac`）逆向工具集
+
+一套用来**读写、检查、生成** Bannerlord `.tpac` 资产包的工具，以及配套的格式说明。
+包含一个 C# 命令行工具、若干 Python 逆向/诊断脚本，和几个 Windows 辅助脚本。
+
+> 面向的场景：想用代码（而不是 Modding Kit 的 GUI 导入流程）离线、可重复地生成模型/贴图/材质资产包，
+> 或者想检查官方编辑器产出的包到底写了什么。
+
+---
+
+## 目录
+
+```
+mbtool/          C# 命令行工具：读取 / 检查 / 构建 / 往返验证 .tpac
+  src/Program.cs   CLI 入口（info / mesh / mat / tex / skel / metacheck / segcheck / ...）
+  src/Builder.cs   资产包构建器（从 JSON 描述生成 pack0.tpac）
+  src/XxHash64.cs  xxh64 实现（含 metadata 校验和封装）
+  src/LZ4Block.cs  LZ4 块编解码（不依赖第三方库）
+  src/HalfCheck.cs half-float 自检
+py/              Python 工具（独立实现，用于交叉验证 C# 结果）
+  tpac.py              独立的 .tpac 读取器（可当库用）
+  walk_mesh.py         逐字段解析网格元数据
+  walk_texture.py      逐字段解析贴图元数据
+  checksum_hunt.py     校验和算法搜寻
+  hash_brute.py        xxh64 参数空间暴力搜索
+  lz4_debug.py         LZ4 块级调试
+  tpac_hdr.py          文件头速查
+  strdump.py           二进制字符串提取
+  qtangent_derive.py   Q-Tangent 四元数约定验证
+  bcencode.py          BC1/BC3/BC4/BC5 编解码器
+  bcencode_selftest.py 编解码器自测（PSNR 断言）
+  dump_skeleton.py     Blender 脚本：从 FBX 导出引擎骨骼表
+setup/
+  patch_tpactool.py    给上游 TpacTool.Lib 打补丁（必须，见下）
+win/
+  ui.ps1               截图 / 点击游戏窗口（不抢焦点，可用于自动化验证）
+  shot.ps1             简单截图
+docs/
+  tpac-format.md       .tpac 格式规范（逆向结果，含校验和公式与字段布局）
+```
+
+---
+
+## 依赖
+
+- **.NET SDK 9 或 10**
+- **Python 3.10+**，`pip install numpy pillow lz4 xxhash`
+- **Blender 4.x / 5.x**（仅 `py/dump_skeleton.py` 需要，可无头运行）
+- [TpacTool](https://github.com/szszss/TpacTool)（MIT）的 `TpacTool.Lib` 源码 —— `mbtool` 建立在它之上
+
+---
+
+## 准备 `mbtool`
+
+上游 `TpacTool.Lib` **只有读取器**，且写盘逻辑有若干缺陷（会导致产出的包在游戏里显示错乱）。
+必须先打补丁：
+
+```bash
+# 1) 下载上游源码（放在与本目录同级的 TpacTool-master/，或改 mbtool.csproj 里的路径）
+curl -L -o TpacTool.zip https://codeload.github.com/szszss/TpacTool/zip/refs/heads/master
+python -c "import zipfile;zipfile.ZipFile('TpacTool.zip').extractall('.')"
+
+# 2) 打补丁（幂等，重复执行安全）
+python setup/patch_tpactool.py ./TpacTool-master
+
+# 3) 编译
+cd mbtool && dotnet build -c Release
+# 产物：mbtool/bin/Release/net9.0/mbtool.exe
+```
+
+`mbtool.csproj` 默认引用 `../TpacTool-master/TpacTool.Lib/**/*.cs`，按需修改。
+
+补丁清单（脚本会逐条应用并打印结果）：
+
+| # | 修补内容 | 影响 |
+|---|---|---|
+| 1 | 资产 metadata 保留原始字节并写入正确的 **xxh64 校验和** | 校验和写 0 会被引擎拒绝 |
+| 2 | 段数据写盘时计算 **xxh64 数据哈希** | 同上 |
+| 3 | **顶点流尺寸表的偏移基准**（首个数组偏移必须是表自身大小，不是 0） | 写错会让引擎把每个数组错读 224 字节，模型扭曲/炸开 |
+| 4 | 数组写入**不要带长度前缀** | 多写前缀会让后续所有数组错位 |
+| 5 | 补全 `Material` / `Texture` / `Mesh` / `Metamesh` / `Skeleton` 的元数据版本号与序列化器 | 版本硬编码会导致元数据长度不符 |
+| 6 | 让 `Metamesh` / `Mesh` 的集合可写，暴露段加载器字段 | 便于按需构造资产 |
+
+> 判断补丁是否生效：拿任意原版包跑 `mbtool segcheck`，所有数据段都应是 `identical`。
+
+---
+
+## `mbtool` 用法
+
+```
+mbtool <命令> [参数...]
+```
+
+### 查看
+
+```bash
+mbtool info   <pack.tpac>                  # 资产数量与类型分布
+mbtool list   <pack.tpac>                  # 列出全部资产（类型 GUID / 名称 / GUID）
+mbtool mesh   <pack.tpac> <网格名>          # 子网格结构、包围盒、骨骼使用、标志
+mbtool mat    <pack.tpac> <材质名>          # shader、混合模式、标志、贴图槽位
+mbtool tex    <pack.tpac> <贴图名>          # 尺寸、mip 数、格式、标志
+mbtool skel   <pack.tpac> [骨骼名]          # 骨骼层级与静置矩阵
+```
+
+### 检索
+
+```bash
+mbtool find      <目录> <名字片段>          # 在目录下所有包里按名字找
+mbtool findguid  <目录> <guid...>          # 按 GUID 找（解析跨包依赖用）
+mbtool guidindex <目录> [输出.tsv]          # 建立 名称/GUID → 包 的索引表
+```
+
+### 校验（改包前后都该跑）
+
+```bash
+mbtool metacheck <pack.tpac>
+#   每个资产的 metadata 重新序列化后与原始字节比对 + 校验和比对
+#   期望：checksum ok=N bad=0 | metadata identical=N differ=0
+
+mbtool segcheck  <pack.tpac> <资产名>
+#   ★ 最有用的检查：把每个数据段用写入器重新序列化，与文件里的原始字节逐段比对
+#   期望：全部 identical。出现 "first diff at byte N" 就说明写入器有偏差
+
+mbtool roundtrip <pack.tpac> <out.tpac>
+#   整包读入再写出，用于验证读写器对称性（拷贝路径下应与原文件字节一致）
+
+mbtool mataudit  <pack.tpac>
+#   审计材质引用的贴图槽位是否齐全、是否有悬空 GUID
+```
+
+### 构建资产包
+
+```bash
+mbtool build <spec.json>
+```
+
+`spec.json` 描述要生成的包。**所有资产都从已有包里的模板资产克隆**（模板提供 shader、布局等难以凭空构造的字段），
+只替换数据、名称与 GUID：
+
+```jsonc
+{
+  "output": "build/pack0.tpac",
+  "packageGuid": "00000000-0000-0000-0000-000000000000",   // 省略则自动生成
+  "templates": {                       // 名字 -> 模板资产来源
+    "mesh":  { "tpac": "<游戏>/Modules/Native/.../armor555.tpac", "name": "empire_legion_a" },
+    "matOpaque": { "tpac": "<游戏>/Modules/Native/AssetPackages/materials.tpac", "name": "plain_white_skinned" }
+  },
+  "textures": [
+    { "name": "my_albedo", "template": "texBC1", "blob": "build/tex/my_albedo.bc",
+      "width": 1024, "height": 1024, "mips": 11, "format": "DXT1" }
+  ],
+  "materials": [
+    { "name": "my_mat", "template": "matOpaque",
+      "textures": { "0": "my_albedo", "1": null, "2": "my_normal" },
+      "blendMode": "no_alpha_blend", "vertexLayoutFlags": ["bumpmap", "skinning"] }
+  ],
+  "meshes": [
+    { "name": "my_mesh", "bodyPart": "", "template": "mesh",
+      "groups": [ { "geometry": "build/my_part.mgeo", "material": "my_mat", "name": "my_mesh.0" } ] },
+    // 或者把已有网格原样克隆、只换名字（做 A/B 对照时很有用）：
+    { "name": "control_mesh", "template": "mesh", "cloneFrom": "mesh" }
+  ]
+}
+```
+
+`.mgeo` 是简单的中间格式（小端）：
+
+```
+i32 magic('MGEO'=0x4F45474D), i32 顶点数 n, i32 索引数 m
+n×3 f32 位置 | n×3 f32 法线 | n×4 f32 切线(xyzw)
+n×2 f32 UV | n×2 f32 UV2 | n×4 u8 颜色
+n×4 u8  骨骼索引 | n×4 u8 骨骼权重 | m×u32 索引
+```
+
+构建时若某子网格顶点数或索引数 ≥ 60000，会自动拆成多个子网格
+（引擎的索引位宽判定与上游读取器的判定条件不同，两边都要 < 65535 才安全）。
+
+---
+
+## Python 工具用法
+
+这些脚本是为**交叉验证** C# 实现而写的：用完全独立的代码路径解析同一个文件，两边一致才敢下结论。
+多数脚本既是可执行程序也可当模块导入。
+
+```bash
+cd py
+
+# 列出包内资产（独立读取器，可当库：from tpac import read_tpac）
+python tpac.py <pack.tpac>
+
+# 逐字段 dump 网格元数据（每一步都打印偏移量，用于和原版逐字段对比）
+python walk_mesh.py <pack.tpac> <网格名>
+
+# 逐字段 dump 贴图元数据
+python walk_texture.py <pack.tpac> <贴图名>
+
+# 文件头速查 / 二进制字符串
+python tpac_hdr.py <pack.tpac>
+python strdump.py <文件> [最小长度]
+
+# LZ4 块级调试（解码/编码、与参考实现对比）
+python lz4_debug.py <pack.tpac> <资产名>
+
+# 校验和算法搜寻：在同一个包里找出"哪个字段是哪种哈希"
+python checksum_hunt.py <pack.tpac>
+
+# xxh64 参数暴力搜索（种子/长度前缀/字节序组合）
+python hash_brute.py <pack.tpac>
+
+# Q-Tangent 四元数约定验证（用原版网格逐顶点验证公式）
+python qtangent_derive.py <pack.tpac> <网格名>
+
+# BC 编解码器自测（断言 PSNR 下限；默认用内置生成的测试图）
+python bcencode_selftest.py
+#   也可指定真实贴图：TEST_ALBEDO_PNG=... TEST_NORMAL_PNG=... python bcencode_selftest.py
+```
+
+作为库使用：
+
+```python
+from bcencode import encode_bc1, encode_bc5, decode_bc5   # numpy (H,W,3/2) uint8
+from tpac import read_tpac
+t = read_tpac("pack0.tpac", read_meta=True)
+for a in t["assets"]:
+    print(a["type_guid"], a["name"], a["meta_size"], len(a["segs"]))
+```
+
+### 骨骼表导出（Blender 无头）
+
+```bash
+blender --background --factory-startup --python py/dump_skeleton.py -- <human_skeleton.fbx> <out.json>
+```
+
+从骨架 FBX 里导出每根骨骼的 head/tail（引擎网格空间）。
+注意：**Blender 导入 FBX 时对 bone tail 是猜测的，不可直接使用**；脚本会额外按"子骨骼位置"重建骨轴。
+
+---
+
+## Windows 辅助脚本
+
+`win/ui.ps1` 用于在**不抢焦点**的前提下截取游戏窗口，以及发送真实点击（自动化验证游戏内效果）：
+
+```powershell
+# 仅截图（用 PrintWindow，窗口被遮挡也能抓到，不会打扰用户）
+.\win\ui.ps1 -out shot.png
+
+# 截图 + 在 (x,y) 真实点击（会切到前台；已处理 Windows 前台锁）
+.\win\ui.ps1 -x 261 -y 533 -out after.png -wait 3000 -foreground 1
+
+# 抓其它进程的窗口
+$env:CAP_PROC = "blender"; .\win\ui.ps1 -out blender.png
+```
+
+> 说明：合成点击必须配合 `SetForegroundWindow`（脚本内部会先发一次 ALT 解除前台锁）；
+> 只发 `PostMessage` 的点击会被游戏忽略。
+
+---
+
+## 格式说明
+
+见 **[docs/tpac-format.md](docs/tpac-format.md)**：文件结构、两级 xxh64 校验和公式、
+顶点流的尺寸表布局、Q-Tangent 四元数约定、骨骼索引含义、贴图格式与 mip 布局等。
+
+---
+
+## 许可与声明
+
+- 本仓库只包含工具与格式文档，**不包含任何游戏素材**。
+- `setup/patch_tpactool.py` 用于给 [TpacTool](https://github.com/szszss/TpacTool)（MIT，© szszss）打补丁，
+  请自行获取上游源码；本仓库不重复分发其代码。
+- 工具仅用于个人学习与模组制作，请遵守相关游戏的使用条款。

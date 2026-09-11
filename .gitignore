@@ -1,0 +1,8 @@
+TpacTool-master/
+TpacTool.zip
+__pycache__/
+*.pyc
+mbtool/bin/
+mbtool/obj/
+build/
+*.tpac
