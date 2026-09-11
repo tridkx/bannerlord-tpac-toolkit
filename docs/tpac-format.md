@@ -53,7 +53,7 @@ i32 索引数量
 ### 5 物品/材质相关
 
 - 材质贴图槽位：**0=反照率、1=第二色/遮罩、2=法线、4=高光**。
-- 材质模板用 `plain_white_skinned`（不透明，单色图+法线+高光，shader `328d3572…` 是角色/布料标准 shader，<reference mod> 也用这个）；带 alpha 的用 `battania_dress_c_alpha_mat`。
+- 材质模板用 `plain_white_skinned`（不透明，单色图+法线+高光，shader `328d3572…` 是角色/布料标准 shader，`LVBU and DIAOCHAN` 这个参考 mod 也用这个）；带 alpha 的用 `battania_dress_c_alpha_mat`。
 - **`covers_*` 标志**：`ArmorComponent` 里没有对应属性，它们被反序列化成 **`MeshesMask`（`SkinMask` 位掩码）**，由原生代码决定隐藏哪些皮肤网格。
 - **`covers_legs="true"` 原版只用在 `LegArmor` 上**（36/36），放在 BodyArmor 上**无效** → 这就是"原版靴子盖住自定义鞋子"的原因。
 
@@ -73,6 +73,6 @@ i32 索引数量
 | 8 | LZ4 压缩器把 match 长度扩展写在偏移之前（顺序错） | 压缩数据非法 | 用 `python-lz4` 参考实现交叉验证通过 |
 | 9 | 照抄了原版 `uses_cloth_simulation` 却没抄 `ClothMetamesh` | 布料解算炸飞（前两张"巨大"截图） | 对照件补全 ClothMetamesh 后大小正常 |
 | 10 | 索引宽度歧义（>65535 个索引时读写器判断依据不同） | 顶点流错位 | 按 <60000 拆分大组为多个子网格 |
-| 11 | `bodyPart` 标签填了 `human_body` | 与两个可用参考 mod 唯一的差别字段 | 已改为空字符串（与 <reference mod> / 上次那份一致） |
+| 11 | `bodyPart` 标签填了 `human_body`（非法的身体变形键） | 与两个能用编辑器正常产出的参考 mod 相比，这是唯一的差别字段 | 改为空字符串后正常；编辑器产出的自定义网格此字段一律为空 |
 
 ---

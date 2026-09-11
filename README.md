@@ -256,6 +256,24 @@ $env:CAP_PROC = "blender"; .\win\ui.ps1 -out blender.png
 
 ---
 
+## 参考资料
+
+- **[LVBU and DIAOCHAN](https://steamcommunity.com/sharedfiles/filedetails/?id=2863411168)** ——
+  一个用官方 Modding Kit 做出来的、能正常使用的角色装备 mod。
+  它的 `Modules/LVBU and DIAOCHAN/AssetPackages/pack0.tpac` 是**非常好的对照样本**：
+  拿 `mbtool segcheck` 跑它、再用 `mbtool mesh` / `mbtool mat` 看它的字段，
+  就能知道"编辑器到底写了什么"，比自己猜快得多。本工具集里的很多结论都是这样对照出来的。
+- **[TpacTool](https://github.com/szszss/TpacTool)**（MIT, © szszss）—— 最早公开的 `.tpac` 解析器，
+  `mbtool` 的读取层建立在它之上（写盘部分需要 `setup/patch_tpactool.py` 打补丁）。
+- **[Bannerlord API 文档](https://apidoc.bannerlord.com/)** —— 查 `ItemObject` / `ArmorComponent`
+  这类类的真实属性（例如 `covers_*` 在 XML 里是属性、在代码里是 `MeshesMask` 位掩码）。
+- **[Bannerlord Modding CN](https://yigu-studio.gitbook.io/bannerlord-modding-cn)** —— 中文 XML 文档，
+  查物品/防具各字段含义很方便。
+- 游戏自带资源里值得对照的包：
+  `Modules/Native/AssetPackages/materials.tpac`（全套材质模板）、
+  `Modules/Native/EmAssetPackages/*.tpac`（角色装备）、
+  `Modules/Native/AssetPackages/meshes_shared_*.tpac`（共享网格）。
+
 ## 格式说明
 
 见 **[docs/tpac-format.md](docs/tpac-format.md)**：文件结构、两级 xxh64 校验和公式、
