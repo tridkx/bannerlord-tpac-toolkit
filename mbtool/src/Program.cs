@@ -37,6 +37,7 @@ namespace MbTool
 					case "mesh": return CmdMesh(argv);
 					case "skel": return CmdSkel(argv);
 					case "mat": return CmdMat(argv);
+					case "matall": return CmdMatAll(argv);
 					case "tex": return CmdTex(argv);
 					case "exportmesh": return CmdExportMesh(argv);
 					case "roundtrip": return CmdRoundTrip(argv);
@@ -411,6 +412,21 @@ namespace MbTool
 				Console.WriteLine($"  extra: areaScale={e.AreamapScale} areaAmt={e.AreamapAmount} detailNrm={e.DetailnormalScale} nrmPower={e.NormalmapPower}");
 				Console.WriteLine($"         mva={e.MeshVectorArgument} mva2={e.MeshVectorArgument2} fcm={e.MeshFactorColorMultiplier} f2cm={e.MeshFactor2ColorMultiplier}");
 				Console.WriteLine($"         renderOrder={e.RenderOrder} mipBias={e.MipmapBias} spec={e.SpecularCoef} gloss={e.GlossCoef} parallax={e.ParallaxAmount}/{e.ParallaxOffset} ao={e.AmbientOcclusionCoef} exp={e.ExposureCompensation}");
+			}
+			return 0;
+		}
+
+		/// <summary>一次性列出包内所有材质的渲染状态参数（找"透明材质长什么样"用）</summary>
+		private static int CmdMatAll(string[] a)
+		{
+			var pkg = Open(a[1], true);
+			foreach (var m in pkg.Items.OfType<Material>())
+			{
+				var e = m.ExtraMaterialSettings;
+				Console.WriteLine($"{m.Name}\t{m.BlendMode}\talphaTest={m.AlphaTest:0.####}\t" +
+					$"flags=[{string.Join(",", m.Flags)}]\tlayer=[{string.Join(",", m.VertexLayoutFlags)}]\t" +
+					$"shaderFlags=[{string.Join(",", m.ShaderMaterialFlags)}]\trenderOrder={(e?.RenderOrder.ToString() ?? "-")}\t" +
+					$"fcm={e?.MeshFactorColorMultiplier}\tshader={m.Shader.Guid}");
 			}
 			return 0;
 		}

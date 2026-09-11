@@ -250,16 +250,17 @@ namespace MbTool
 				mat.VertexLayoutFlags = vl.EnumerateArray().Select(x => x.GetString()).ToList();
 			if (spec.TryGetProperty("shaderMaterialFlags", out var smf))
 				mat.ShaderMaterialFlags = smf.EnumerateArray().Select(x => x.GetString()).ToList();
+			// copy the template's texture bindings, then override/extend from the spec
+			foreach (var kv in tmpl.Textures)
+				mat.Textures[kv.Key] = new AssetDependence<Texture>(kv.Value.Guid);
+
+			// NOTE: 必须放在复制模板贴图**之后** —— 否则刚删掉的槽会被模板再填回来（原实现就是这个问题）
 			if (spec.TryGetProperty("dropTextureSlots", out var drop))
 			{
 				var dropSet = drop.EnumerateArray().Select(x => x.GetInt32()).ToHashSet();
 				foreach (var key in mat.Textures.Keys.Where(k => dropSet.Contains(k)).ToList())
 					mat.Textures.Remove(key);
 			}
-
-			// copy the template's texture bindings, then override/extend from the spec
-			foreach (var kv in tmpl.Textures)
-				mat.Textures[kv.Key] = new AssetDependence<Texture>(kv.Value.Guid);
 
 			if (spec.TryGetProperty("textures", out var ts))
 			{
