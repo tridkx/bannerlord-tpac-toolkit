@@ -22,7 +22,21 @@ namespace MbTool
 			public AssetPackage Package;
 			public Dictionary<string, AssetPackage> OpenPackages = new Dictionary<string, AssetPackage>();
 			public List<string> Log = new List<string>();
+			// ★ 种子不能写死。原先固定为 20260910，导致**同一工具构建的每个 mod 都得到
+			//   完全相同的 GUID 序列** —— 两个 mod 同时加载时，引擎按 GUID 索引资产，
+			//   后加载的把先加载的覆盖掉，表现为"贴图紊乱"（实测 AdaWongCheongsam 与
+			//   ValerieHarmonRB 有 31 个 GUID 完全撞车）。
+			//   改为由包 GUID 派生：同一个 spec 仍然可复现，不同包之间必然不同。
 			public Random Rng = new Random(20260910);
+
+			public void SeedRng(Guid packageGuid)
+			{
+				var pb = packageGuid.ToByteArray();
+				int seed = BitConverter.ToInt32(pb, 0) ^ BitConverter.ToInt32(pb, 4)
+				           ^ BitConverter.ToInt32(pb, 8) ^ BitConverter.ToInt32(pb, 12)
+				           ^ 20260910;
+				Rng = new Random(seed);
+			}
 			public JsonElement Spec;
 
 			public AssetPackage Pkg(string path)
@@ -68,9 +82,9 @@ namespace MbTool
 
 			string output = spec.GetProperty("output").GetString();
 			var guidStr = spec.TryGetProperty("packageGuid", out var g) ? g.GetString() : null;
-			ctx.Package = string.IsNullOrEmpty(guidStr)
-				? new AssetPackage(ctx.NewGuid())
-				: new AssetPackage(Guid.Parse(guidStr));
+			var pkgGuid = string.IsNullOrEmpty(guidStr) ? Guid.NewGuid() : Guid.Parse(guidStr);
+			ctx.Package = new AssetPackage(pkgGuid);
+			ctx.SeedRng(pkgGuid);   // ★ 先定包 GUID，再据它派生资产 GUID 序列
 
 			var texByName = new Dictionary<string, Texture>();
 			if (spec.TryGetProperty("textures", out var texs))
