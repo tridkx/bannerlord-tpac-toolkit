@@ -1158,20 +1158,28 @@ def build_argparser():
     ap.add_argument("--chars", default=None, help="逗号分隔，默认全部")
     ap.add_argument("--work-root", default=None, help="--pack 时的中间产物目录")
     ap.add_argument("--mbtool", default=None)
-    ap.add_argument("--nframes", type=int, default=48,
+    ap.add_argument("--nframes", type=int, default=96,
                     help="预计算多少帧。同样的帧数下，动画越长每帧跨度越大、越卡；"
                          "长动画配合 --seconds 用")
-    ap.add_argument("--min-fps", type=float, default=15.0,
+    ap.add_argument("--min-fps", type=float, default=60.0,
                     help="默认播放帧率下限：帧数不够铺满整段时，自动只取前几秒"
-                         "（15 秒的待机用 48 帧只有 3.2 fps，会一顿一顿）。"
-                         "设 0 表示不截断、整段都采")
+                         "不足会被**混叠成抖动**：实测待机动画逐帧最大位移 "
+                         "15fps 时 38mm、30fps 时 23mm、60fps 时 9.5mm —— "
+                         "所以默认 60。设 0 表示不截断、整段都采")
     ap.add_argument("--seconds", type=float, default=None,
                     help="只采动画的前 N 秒（秒数按 clip 声明的时长换算到 t 轴）。"
                          "装备页待机 15 秒，看前 3~4 秒足够，且流畅得多")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--fps", type=float, default=24.0,
                     help="兜底播放帧率；有 clip 时长时以 clip 为准")
-    ap.add_argument("--cache-slots", type=int, default=2, help="逐帧缓存的角色×动画组合数")
+    ap.add_argument("--cache-slots", type=int, default=1,
+                    help="逐帧缓存的角色×动画组合数。一份 96 帧 ≈ 265MB（11 万顶点），"
+                         "默认只留 1 份")
+    ap.add_argument("--no-compose-q", action="store_true",
+                    help="把动画四元数当**世界朝向**（旧行为）而不是**相对父骨的局部朝向**。"
+                         "两种解读差别很大：局部朝向（默认）让待机时脚底贴地、手臂自然下垂；"
+                         "世界朝向会让手臂停在 A-pose、脚踝前后晃 18cm。"
+                         "换别的动画/骨架若发现姿势不对，先拿这个开关做 A/B")
     ap.add_argument("--bones", action="store_true",
                     help="启动就叠加显示骨架（等于按 B）")
     ap.add_argument("--unlit", action="store_true",
@@ -1347,6 +1355,10 @@ def main():
     from pyglet.window import key
     win = pyglet.window.Window(1100, 800, caption="mb-preview — Bannerlord 皮套动画预览",
                                vsync=not a.no_vsync)
+    import anim_pose as _AP
+    if getattr(a, "no_compose_q", False):
+        _AP.COMPOSE_LOCAL_Q = False
+        print("[gui] 按旧行为：把 q 当世界朝向（--no-compose-q）")
     v = Viewer(data, a, a.tex_dir, window=win)
     v.show_bones = bool(getattr(a, "bones", False))
     v.cur = 0

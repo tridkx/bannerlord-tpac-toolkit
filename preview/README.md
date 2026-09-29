@@ -227,6 +227,7 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | `render.py` 拒绝渲染导入的网格 | `faces` 必须是 `(M,3)` 二维，`import_mod` 写成了展平一维 |
 | 自检打印出"位移 67 米" | `np.linalg.norm(X)` 漏了 `axis=2`，返回的是**整个数组的标量范数**。函数没写错、单测也过，但打印出来像模型炸了 |
 | `preview-gui.bat` 报 `drag was unexpected` | cmd.exe 对**深层嵌套的 `( )` 块**（且块内含带引号的 `set`）解析错乱。改成扁平 `if/goto` 结构 |
+| **待机动作"抽"、幅度比游戏里大** | 两个独立原因：① **播放帧率不足导致混叠** —— 动画含高频成分（脚/小腿微动），15fps 采样时逐帧最大位移 38mm、30fps 23mm、**60fps 只 9.5mm**；所以默认帧率是 60（`--min-fps`），帧数默认 96。② 一度怀疑是"q 是世界朝向还是局部朝向"，实测**并排渲染**后发现复合 q 会让骨盆歪斜/脚踝翻转（更差），**保持世界朝向**。⚠️ 顺带证伪了一条判据："站立待机时脚不动"会被"姿势整体缩起来"满足 —— 物理判据能证伪、不能单独证真，最终要并排渲染对着看 |
 | **动画快得离谱、像在抽搐** | `tick` 里拿 `meta["fps"]`（= t_end / clip 时长，单位是 **t 单位/秒**，实测 84.5）当**帧率**用了。采样帧每帧代表 ≈26 个 t，于是每秒掠过 2230 个 t 单位 ⇒ 15 秒的循环 0.57 秒播完。正确帧率 = **帧数 ÷ 采样覆盖秒数**（`play_fps()`）。同理 `--record` 的 GIF 帧延时也要按"覆盖秒数"算 |
 | **GUI 开得出来、看得见人物，但人物一动不动，随后 Windows 提示"无响应"** | 两个叠在一起的错：① `self.last`（帧推进累积器）被初始化成 `time.time()` = Unix 时间戳 ≈1.7e9，而 `tick` 里是 `while self.last >= step: self.last -= step`（step ≈ 1/84 s）⇒ **第一次 tick 就进入要迭代 1.4e11 次的死循环**，事件循环再也回不来；② `pyglet 1.5.31` 的 `Win32Window` **没有 `invalidate()` 方法**（只有 `invalid` 属性），请求重绘写成 `invalidate()` 会每帧抛 AttributeError。修法：累积器从 `0.0` 起，重绘写 `win.invalid = True`。**判据：`--run-seconds 8` 必须打印出 draw 次数与帧号在动**（改之前它每次都跑到被超时杀掉） |
 | 在 `%TEMP%` 下跑的 Python 脚本莫名报 `No module named 'bpy'` | `%TEMP%` 里堆着历史 Blender 脚本，其中 `inspect.py` **撞了标准库名**，脚本放在该目录运行时 `sys.path[0]` 会遮蔽标准库。临时脚本别放 `%TEMP%` |

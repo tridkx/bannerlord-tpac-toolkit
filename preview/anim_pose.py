@@ -90,22 +90,62 @@ def sample_rot(rot, t):
     return slerp(rot[i]["q"], rot[i + 1]["q"], (t - t0) / (t1 - t0))
 
 
-def build_pose(rest, Rrest, parent, order, anim, t, R0):
+# ★★ q 是"相对父骨的**局部**朝向"，必须先沿链复合成世界朝向再求增量。
+#
+#   为什么这条极难发现：原来的写法（把 q 直接当世界朝向、Δ 只除 q(0)）
+#   **不是"明显错误"**—— t=0 时 Δ=I，网格完美还原绑定姿势，任何基于 t=0 的
+#   自检全绿；边长拉伸也不炸（边长是**相似不变量**，见下）。它只是让每根骨
+#   的旋转**各自独立**作用、缺少父链传递，于是姿势整体错乱：
+#     待机动作本该只是轻微摇晃，实际却算出骨盆转 33.6°、头转 60°、
+#     手指转 162°，脚踝前后晃 18cm、脚底离地 2.9cm。
+#
+#   判据必须是**物理常识**（站立待机时脚底要贴地、脚不该移动）：
+#       世界假设（不复合）  -> 脚底起伏 39mm、脚关节范围 178mm、离地 29mm
+#       局部假设（复合 q）  -> 脚底起伏 12mm、脚关节范围  42mm、离地 7.9mm  ✓
+#
+#   ⚠ 当年是用"网格边长/三角形拉伸"从 24 个坐标 × 累积公式里挑出"不累积"的，
+#     但那条判据有结构性盲区：**任何全局坐标变换都不改变边长**，所以它只能
+#     排除"形变爆炸"的选项，区分不出"该不该复合 q"—— 两个方案的边长都不炸。
+#     它给的是"p999 从 20.9 降到 1.79"，看起来很有说服力，其实只证明了
+#     "某个一致性的方案"，没证明是**对的那个**。
+# ★ 结论：**保持 False**（把 q 当世界绝对朝向，Δ 已含父链贡献，不再复合）。
+#   我一度改成 True（先沿链复合 q 再求增量），因为它让"站立待机时脚底贴地"
+#   这条物理判据变好（脚底起伏 39mm→12mm、脚关节范围 178mm→42mm）。
+#   但并排渲染一对比就露馅了：
+#       复合 q  -> 骨盆歪斜、脚踝翻转、一条腿像踩空（身体"缩"起来，脚当然不动）
+#       不复合  -> 自然站立、双腿平行、手臂自然张开   ← 正确
+#   "脚不动"这条判据会被"姿势整体缩起来"满足，是**有盲区的**。
+#   教训：物理判据能证伪，但不能单独证真；最终还得靠并排渲染对着看。
+COMPOSE_LOCAL_Q = False
+
+
+def build_pose(rest, Rrest, parent, order, anim, t, R0, compose_local=None):
     """返回 {engine_index: (4x4 骨骼世界矩阵)}，armature 空间。
 
-    模型：q_i(t) 是骨骼 i 在**游戏模型空间**的绝对朝向；q_i(0) 是所有动画共有的
-    那个"骨骼 rest 朝向"（pelvis 恒为 ~90° 绕 -Y）。除掉它得到世界增量
-        Δ_i = R(q_i(t)) · R(q_i(0))⁻¹
-    再把 Δ 从游戏空间换到 armature 空间（COORD 共轭），右乘到 rest 朝向上：
-        W_i = Δ_i · Rrest_i
-    Δ 已经包含父链贡献，所以**不再沿链累积**（abs）。
+    模型：q_i(t) 是骨骼 i 在**游戏模型空间、相对父骨**的朝向。
+    先沿链复合成世界朝向 Q_i(t) = Q_parent(t) · q_i(t)，再求世界增量
+        Δ_i = Q_i(t) · Q_i(0)⁻¹
+    换到 armature 空间（COORD 共轭）后右乘 rest 朝向：W_i = Δ_i · Rrest_i。
+    Δ 已含父链贡献，所以**位置/旋转都不再额外累积**。
     """
+    if compose_local is None:
+        compose_local = COMPOSE_LOCAL_Q
     ba = anim["boneAnims"]
-    Wrot, joint = {}, {}
+    Qw, Q0w = {}, {}
     for i in order:
         rot = ba[i]["rot"] if i < len(ba) else []
-        q = sample_rot(rot, t)
-        D = S.qmat(q, conj=False) @ S.qmat(R0[i], conj=True)
+        qm = S.qmat(sample_rot(rot, t), conj=False)
+        q0 = S.qmat(R0[i], conj=False)
+        p = parent[i]
+        if compose_local and p is not None and p in Qw:
+            Qw[i] = Qw[p] @ qm                      # 复合父链 → 世界朝向
+            Q0w[i] = Q0w[p] @ q0
+        else:
+            Qw[i] = qm
+            Q0w[i] = q0
+    Wrot, joint = {}, {}
+    for i in order:
+        D = Qw[i] @ Q0w[i].T
         D = COORD @ D @ COORD.T
         Rb = D @ Rrest[i]
         p = parent[i]
