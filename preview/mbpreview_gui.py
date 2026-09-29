@@ -747,7 +747,8 @@ class Viewer:
             GL_TEXTURE_2D, glBindTexture, glDisable, GL_TRIANGLES,
             glDrawElements, GL_UNSIGNED_INT, GL_ELEMENT_ARRAY_BUFFER,
             glDisableClientState, GL_ALPHA_TEST, glAlphaFunc, GL_GREATER,
-            GL_BLEND, glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, glDepthMask)
+            GL_BLEND, glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, glDepthMask,
+            glColor4f)
         from pyglet.gl.glu import gluPerspective, gluLookAt
         glClearColor(0.10, 0.11, 0.13, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -837,6 +838,13 @@ class Viewer:
         glDisableClientState(GL_TEXTURE_COORD_ARRAY)
         if self.show_bones:
             self.draw_bones()
+        # 收尾复位：别把"某个材质组的状态"留给后面的绘制者
+        # （UI 层已经因为这类残留吃过一次亏：按钮底色被贴图调制、被 alphaTest 剪掉）
+        glDisable(GL_ALPHA_TEST)
+        glDisable(GL_BLEND)
+        glDisable(GL_TEXTURE_2D)
+        glDepthMask(1)
+        glColor4f(1.0, 1.0, 1.0, 1.0)
 
     # ---- 骨骼叠加 ----
     def draw_bones(self):
@@ -848,8 +856,25 @@ class Viewer:
         模型变灰色线框感更强）。
         """
         from pyglet.gl import (glDisable, glEnable, GL_DEPTH_TEST, glLineWidth,
-                               glPointSize, GL_LINES, GL_POINTS)
+                               glPointSize, GL_LINES, GL_POINTS,
+                               GL_ALPHA_TEST, GL_TEXTURE_2D, GL_BLEND,
+                               GL_LIGHTING, GL_CULL_FACE, GL_COLOR_ARRAY,
+                               glEnableClientState, glDisableClientState,
+                               glColor4f)
         from pyglet.graphics import vertex_list
+        # ★★ 画骨骼前必须把三维那边留下的状态清干净。
+        #   紧挨着骨骼绘制的，是**最后一个材质组的渲染状态** —— 它可能是
+        #   发丝/睫毛那种 `alphaTest=0.2745` 的镂空材质，于是骨骼线被当成
+        #   "低 alpha 像素"整条剪掉；光照也会把顶点色压暗。
+        #   而 `groups` 的顺序来自 `np.unique(face_group)`，**不同角色不一样** ⇒
+        #   出现"月清疏能看见骨骼、白茉晴完全看不见"这种跟着角色变的怪现象
+        #   （实测：bai 的骨骼开/关差异像素 = 0，即一根线都没画出来）。
+        glDisable(GL_ALPHA_TEST)
+        glDisable(GL_TEXTURE_2D)
+        glDisable(GL_BLEND)
+        glDisable(GL_LIGHTING)
+        glDisable(GL_CULL_FACE)
+        glColor4f(1.0, 1.0, 1.0, 1.0)
         fr = self.frames
         J = fr["joints"][self.cur]
         pairs = [(self.data.parent[i], i) for i in self.data.order
@@ -872,7 +897,9 @@ class Viewer:
         pv.delete()
         glLineWidth(1.0)
         glPointSize(1.0)
+        glDisableClientState(GL_COLOR_ARRAY)
         glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)          # 交还给后续绘制（UI 层自己会再清一遍）
 
     # ---- HUD ----
     def hud_text(self):

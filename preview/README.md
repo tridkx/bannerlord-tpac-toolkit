@@ -222,6 +222,7 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | **头发/发饰上全是噪点** | 只上传 mip0（2048² 缩到 800px 窗口严重走样）⇒ 生成 mip 链 + 三线性过滤 |
 | **十几个组共用同一张贴图** | `import_mod` 写 `texmap.json` 时用的键空间是**材质名**，预览器按**组名**查 ⇒ 全部落空后静默退到关键词表的第一个词（`cloth1`）。**键必须是子网格组名** |
 | 工程路径下贴图仍然对不上 | 源材质名（`MI_MAJ02_01_hair`）→ 贴图（`yue_hair_d`）的映射只存在于工程脚本里。`project_map.py` 用 `ast` 解析 `render.py` 的 `MAT_TABLE`（**表是嵌套的**，按角色分组，不能只取"最大的那个字典"），解析结果缓存到 `work/texmap_project.json` |
+| **骨骼在一个角色上能显示、换个人一根线都没有** | 骨骼是**材质组渲染之后**追加画的，继承了最后一个材质组的状态 —— 发丝材质开着 `alphaTest=0.2745`，骨骼线被当低 alpha 像素整条剪掉。而 `groups` 顺序来自 `np.unique(face_group)`，**每个角色不一样** ⇒ 表现成"跟角色绑定的怪 bug"。修法：追加绘制前显式清 `ALPHA_TEST/TEXTURE_2D/BLEND/LIGHTING/CULL_FACE`，收尾复位。验证用 **开/关骨骼的 A/B 差异像素**（`selftest_bones.py`），别数颜色 —— 按"橙色像素"统计会把粉色腰带算进去，实测得出过相反结论 |
 | 走光保护片挡在身体前面 | 中间产物带着 `M_ProxyHide` 等 4 类被工程丢弃的材质，预览器应同样跳过（自动读 `DROP_MATS`） |
 | `render.py` 拒绝渲染导入的网格 | `faces` 必须是 `(M,3)` 二维，`import_mod` 写成了展平一维 |
 | 自检打印出"位移 67 米" | `np.linalg.norm(X)` 漏了 `axis=2`，返回的是**整个数组的标量范数**。函数没写错、单测也过，但打印出来像模型炸了 |
@@ -269,6 +270,7 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | `selftest_anim.py` | 验证动画解包质量：四元数归一化 / 相邻关键帧跳变 / 采样帧间位移（"抽搐"就是靠它定位到 `t=0` 是 rest 帧的） |
 | `selftest_gl_refresh.py` | 验证 pyglet 1.5 的刷新机制（`invalid=True` vs 手动 flip vs 不请求，三种写法实测对照） |
 | `selftest_ui.py` / `selftest_buttons.py` | 无头点一遍按钮回调与命中测试（新写的交互路径无法交互测试，靠它们把关） |
+| `selftest_bones.py` | 逐角色验证"骨骼叠加"真的画出来了（A/B 差异像素判据，见 §9 那一行） |
 | `probe_anim_space.py` / `solve_anim_*.py` | 当初解"动画四元数约定"的探针（留档） |
 | `diag_lbs.py` / `diag_anim_bones.py` | 按骨/按材质组定位"是哪根骨炸了" |
 | `sketch_anim_frames.py` / `sketch_anim_hypotheses.py` | 骨架逐帧图 / 约定假设对比图 |
