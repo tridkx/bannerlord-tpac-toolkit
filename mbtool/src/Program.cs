@@ -12,6 +12,10 @@ namespace MbTool
 	{
 		public static int Main(string[] argv)
 		{
+			// ★ 输出里有中文，而 Windows 控制台默认 GBK(936)：不钉死 UTF-8 的话，
+			//   在 bash/管道里全是乱码（工具本身没问题，只是看不见）。
+			try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
+
 			if (argv.Length == 0)
 			{
 				Usage();
@@ -41,6 +45,12 @@ namespace MbTool
 					case "tex": return CmdTex(argv);
 					case "exportmesh": return CmdExportMesh(argv);
 					case "roundtrip": return CmdRoundTrip(argv);
+					case "animlist": return Anim.List(argv);
+					case "cliplist": return Anim.ClipList(argv);
+					case "clip": return Anim.Clip(argv);
+					case "anim": return Anim.Dump(argv);
+					case "skeljson": return Anim.SkelJson(argv);
+					case "exportmod": return ExportMod.Run(argv);
 					default:
 						Usage();
 						return 1;
@@ -67,6 +77,19 @@ namespace MbTool
   tex <tpac> <assetName>               texture details
   exportmesh <tpac> <name> <outPrefix> dump geometry to <outPrefix>.bin + <outPrefix>.json
   roundtrip <tpac> <out>               read then write a package (validates the writer)
+
+  -- skeletal animation --
+  animlist <animations.tpac> [filter]  list skeletal animations (name / bones / duration)
+  cliplist <animation_clips.tpac> [f]  list animation clips
+  clip <animation_clips.tpac> <name>   one clip's metadata (incl. its animation guid)
+  anim <animations.tpac> <name|guid> [out.json] [skeletons.tpac]
+                                       dump animation keyframes to JSON
+  skeljson <skeletons.tpac> <name> <out.json>
+                                       dump skeleton (bone names / parents / rest) to JSON
+
+  -- whole-mod export (for the offline previewer) --
+  exportmod <pack.tpac> <outDir> [lod] export meshes + materials + textures(PNG)
+                                       as a self-contained folder
 ");
 		}
 

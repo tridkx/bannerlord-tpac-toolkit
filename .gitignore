@@ -6,3 +6,18 @@ mbtool/bin/
 mbtool/obj/
 build/
 *.tpac
+
+# ---- 离线预览器（preview/）----
+# ★ 游戏原版数据不进仓库（版权）：骨架导出与动画 dump 都在本地生成，
+#   生成方法见 preview/README.md §3/§4。工具代码本身照常提交。
+preview/bl_skeleton.json
+preview/anims/*.json
+preview/anims/clips.txt
+preview/anims/index.json
+# 本地验证产物 / 审查现场 / 缓存
+preview/_verify/
+preview/_review/
+preview/_review2/
+preview/__pycache__/
+preview/shot_*.png
+preview/record_*/
