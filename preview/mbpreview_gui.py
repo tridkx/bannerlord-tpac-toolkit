@@ -87,6 +87,7 @@ TEX_KEYWORDS = ["cloth1", "cloth2", "cloth3", "macrame", "tassel", "mouth",
 DEFAULT_SKELETON = HERE / "bl_skeleton.json"
 
 HAIR_ALPHA_TEST = 0.2745   # 骑砍发丝 alphaTest 阈值（与 render.py 保持一致）
+ALPHA_TEST_OVERRIDE = None  # --alpha-test 命令行覆盖（None = 用材质自带值）
 
 
 # ==========================================================================
@@ -411,14 +412,19 @@ class DataSet:
                         break
             if alpha_test <= 0 and self._looks_cutout(mat):
                 alpha_test = HAIR_ALPHA_TEST
-            return {"tex": tex, "alpha_test": alpha_test, "blend": blend,
-                    "guessed": tex is None}
+            return {"tex": tex, "alpha_test": self._override_at(alpha_test),
+                    "blend": blend, "guessed": tex is None}
 
         # ---- 没有映射表时的兜底（工程 work/posed 那条路）----
         if self._looks_cutout(mat):
             alpha_test = HAIR_ALPHA_TEST
-        return {"tex": self._guess_tex(char, mat), "alpha_test": alpha_test,
+        return {"tex": self._guess_tex(char, mat),
+                "alpha_test": self._override_at(alpha_test),
                 "blend": blend, "guessed": True}
+
+    def _override_at(self, at):
+        """--alpha-test 覆盖（调试「发片看不见」时用）。"""
+        return float(ALPHA_TEST_OVERRIDE) if ALPHA_TEST_OVERRIDE is not None else at
 
     def is_dropped(self, mat):
         """工程声明的丢弃材质（支持前缀写法）。"""
@@ -747,6 +753,7 @@ class Viewer:
             GL_TEXTURE_2D, glBindTexture, glDisable, GL_TRIANGLES,
             glDrawElements, GL_UNSIGNED_INT, GL_ELEMENT_ARRAY_BUFFER,
             glDisableClientState, GL_ALPHA_TEST, glAlphaFunc, GL_GREATER,
+            glLightModeli, GL_LIGHT_MODEL_TWO_SIDE,
             GL_BLEND, glBlendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, glDepthMask,
             glColor4f)
         from pyglet.gl.glu import gluPerspective, gluLookAt
@@ -778,6 +785,13 @@ class Viewer:
         glLightfv(GL_LIGHT1, GL_POSITION, (ctypes.c_float * 4)(-0.5, -0.7, -0.2, 0.0))
         glLightfv(GL_LIGHT1, GL_DIFFUSE, (ctypes.c_float * 4)(0.22, 0.22, 0.24, 1.0))
         glLightfv(GL_LIGHT1, GL_AMBIENT, (ctypes.c_float * 4)(0.0, 0.0, 0.0, 1.0))
+        # ★★ 双面光照：骑砍的发丝/裙摆是 `two_sided` 材质，**两面都要照亮**。
+        #   GL 默认 GL_LIGHT_MODEL_TWO_SIDE=FALSE —— 背面会拿"正面的法线"去算光照，
+        #   结果恒为背光。深棕发丝 [74,60,49] 乘上只剩环境光就变成 [30,24,20]，
+        #   而预览器背景是 [26,28,33]：**发片直接融进背景，看上去就是"消失了"**，
+        #   而且表现为"从哪个视角看就看不到哪个方向的头发"（那个方向的法线背光）。
+        #   只做 glDisable(GL_CULL_FACE)（两面都画）是不够的，必须同时开双面光照。
+        glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, 1)
         glEnable(GL_COLOR_MATERIAL)
         glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
 
@@ -1180,6 +1194,10 @@ def build_argparser():
                          "两种解读差别很大：局部朝向（默认）让待机时脚底贴地、手臂自然下垂；"
                          "世界朝向会让手臂停在 A-pose、脚踝前后晃 18cm。"
                          "换别的动画/骨架若发现姿势不对，先拿这个开关做 A/B")
+    ap.add_argument("--alpha-test", type=float, default=None,
+                    help="覆盖材质的 alphaTest 阈值（0 = 完全不剪）。"
+                         "调试「某些发片/刘海看不见」用：有些包的镂空贴图 alpha 偏低，"
+                         "按 0.2745 剪会整片消失，需要看贴图实际分布再定阈值")
     ap.add_argument("--bones", action="store_true",
                     help="启动就叠加显示骨架（等于按 B）")
     ap.add_argument("--unlit", action="store_true",
@@ -1355,6 +1373,9 @@ def main():
     from pyglet.window import key
     win = pyglet.window.Window(1100, 800, caption="mb-preview — Bannerlord 皮套动画预览",
                                vsync=not a.no_vsync)
+    if a.alpha_test is not None:
+        globals()["ALPHA_TEST_OVERRIDE"] = float(a.alpha_test)
+        print(f"[gui] alphaTest 阈值被覆盖为 {a.alpha_test}（0 = 不剪）")
     import anim_pose as _AP
     if getattr(a, "no_compose_q", False):
         _AP.COMPOSE_LOCAL_Q = False
