@@ -90,9 +90,12 @@ preview/anims/index.json    每个动画对应的 clip 时长（见 §5）
 preview/anims/clips.txt     mbtool cliplist 的输出（生成 index 的原料）
 ```
 
-> ⚠️ 上面这几个文件是**游戏原版数据的导出物**，出于版权考虑**不进 git 仓库**
-> （见 `.gitignore`）。clone 之后按 §4 的命令自己生成一次即可；生成后
-> `preview-gui.bat` 会自动用到它们。
+> 上面这几个文件（骨架表 + 三个动画 + clip 清单）**已随仓库提供**，clone 下来
+> 双击 `preview-gui.bat` 就能用；要加别的动画按 §4 的命令自己 dump 一次即可。
+> 不进仓库的只有本地跑出来的临时产物（`_verify/`、`record_*/`、截图等）。
+
+界面与验证截图见 [`docs/`](docs/)：`gui_open_btn.png`（按钮条总览）、
+`gui_final.png`（骨骼叠加）、`head_zoom.png`（贴图正确性）。
 
 ## 4. 补一次动画 / 重建索引
 
