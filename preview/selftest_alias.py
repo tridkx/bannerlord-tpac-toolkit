@@ -11,13 +11,13 @@ import numpy as np
 import anim_pose as AP
 from sketch_anim_frames import load_skeleton
 
-P = Path("D:/dsh-mod/mb-xianjian7/work/imported")
+P = Path(__import__("os").environ.get("MB_POSED", "work_imported"))
 rest, Rrest, parent, names, order = load_skeleton("bl_skeleton.json")
 Mrest = {}
 for i in order:
     m = np.eye(4); m[:3, :3] = Rrest[i]; m[:3, 3] = rest[i]; Mrest[i] = m
 Minv = {i: np.linalg.inv(Mrest[i]) for i in order}
-z = np.load(P / "yue.npz", allow_pickle=True)
+z = np.load(P / "yue.npz", allow_pickle=True)   # 可用 MB_POSED 指定目录
 V = z["verts"].astype(np.float64); bi = z["bone_idx"]; bw = z["bone_wt"]
 Varm = V @ AP.C_ARM_FROM_ENG.T
 
