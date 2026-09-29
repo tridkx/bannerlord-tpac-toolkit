@@ -222,6 +222,8 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | **头发/发饰上全是噪点** | 只上传 mip0（2048² 缩到 800px 窗口严重走样）⇒ 生成 mip 链 + 三线性过滤 |
 | **十几个组共用同一张贴图** | `import_mod` 写 `texmap.json` 时用的键空间是**材质名**，预览器按**组名**查 ⇒ 全部落空后静默退到关键词表的第一个词（`cloth1`）。**键必须是子网格组名** |
 | 工程路径下贴图仍然对不上 | 源材质名（`MI_MAJ02_01_hair`）→ 贴图（`yue_hair_d`）的映射只存在于工程脚本里。`project_map.py` 用 `ast` 解析 `render.py` 的 `MAT_TABLE`（**表是嵌套的**，按角色分组，不能只取"最大的那个字典"），解析结果缓存到 `work/texmap_project.json` |
+| **刘海"半透明"，能透过它看到模型内壳**（其他头发正常） | `alphaTest>0`（镂空/硬边）与 `blend`（半透明）**互斥**，不能同时用。骑砍发丝材质两个标志都带着（`alphaTest=0.2745` + `blendMode=factor`），早先按 blend 走 ⇒ 刘海被 alpha 混合成半透明。其他发片贴图 alpha 是干净的 0/255，混不混看不出；刘海的贴图带中间 alpha 值，一混就露馅。修：`alpha_test>0` 时**优先按镂空处理**（`glDisable(GL_BLEND)` + 照常写深度） |
+| **动画幅度不对、走路时手臂高举张开** | 见 §9.6：Δ 的**基准**取错了（用了动画第 0 帧，应为游戏骨架的 bind pose） |
 | **"从哪个视角看就看不到哪个方向的头发"**（白茉晴没刘海、俯视没头顶，月清疏正常） | `two_sided` 材质只做了"不剔除"，**漏了双面光照**。GL 默认 `GL_LIGHT_MODEL_TWO_SIDE=FALSE` ⇒ 背面拿正面法线算光照，恒为背光；深棕发丝 `[74,60,49]` 乘上只剩环境光变成 `[30,24,20]`，而背景正是 `[26,28,33]` ⇒ **发片融进背景，看着就是"消失"**。修：`glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, 1)`。判据用 `--unlit` 对照（无光照时刘海像素 6058、有光照只剩 1425，修后恢复到 4157）。★ 这类"忽隐忽现"还会加重动画的"抽"感 |
 | **骨骼在一个角色上能显示、换个人一根线都没有** | 骨骼是**材质组渲染之后**追加画的，继承了最后一个材质组的状态 —— 发丝材质开着 `alphaTest=0.2745`，骨骼线被当低 alpha 像素整条剪掉。而 `groups` 顺序来自 `np.unique(face_group)`，**每个角色不一样** ⇒ 表现成"跟角色绑定的怪 bug"。修法：追加绘制前显式清 `ALPHA_TEST/TEXTURE_2D/BLEND/LIGHTING/CULL_FACE`，收尾复位。验证用 **开/关骨骼的 A/B 差异像素**（`selftest_bones.py`），别数颜色 —— 按"橙色像素"统计会把粉色腰带算进去，实测得出过相反结论 |
 | 走光保护片挡在身体前面 | 中间产物带着 `M_ProxyHide` 等 4 类被工程丢弃的材质，预览器应同样跳过（自动读 `DROP_MATS`） |
@@ -255,6 +257,44 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | 同一包内不同 metamesh 可能取到不同 lod | 清单只报一个 `lodUsed`；`import_mod` 合并时不检查 |
 | BC5 解出的 PNG 把 B 通道填 0 | 预览器只用槽 0/1 所以没爆，但导出的法线贴图是错的（应为 `sqrt(1-x²-y²)`） |
 
+## 9.6 动画：Δ 的基准必须是"游戏骨架的 bind pose"
+
+这一段是当前**仍在推进**的问题，记录已确认的部分，避免重复走弯路。
+
+**症状**：待机动作幅度远大于游戏（游戏里只是轻微摇晃）；走路动画的手臂高举张开、
+"腿部骨骼全在身子后面晃"。
+
+**已确认的定量证据**（判据：手到身体中线的水平距离，自然摆臂 150~300mm、A-pose 650mm）：
+
+| 基准 R0 取自 | 待机 | 走路 |
+|---|---|---|
+| 动画第 0 帧（旧做法） | 584mm ← 停在 A-pose | 556mm |
+| **游戏骨架资产的 rest** | **281mm** ✓ | **309mm** ✓ |
+
+**根因**：`Δ = R(q(t)) · R(q(0))⁻¹` 里的 `q(0)` 是**该动画自己的第一帧姿势**，
+不是共享的 rest 朝向（实测三个动画的 `q(0)` 有 20 根骨不同，走路与待机差 161°）。
+而 `bl_skeleton.json` 又是**官方 human_skeleton.fbx 的 rest（A-pose，手在 x=0.650）**，
+游戏骨架的 bind pose 则是**手臂自然下垂不贴身（手在 x=0.314）**。
+拿"动画第一帧"当基准去旋转"A-pose 的绑定网格"，手臂就永远停在 A-pose 附近。
+
+**游戏骨架 rest 从哪来**：Modding Kit 装好后在
+`<游戏根>/modding_resources/skeletons/human_skeleton.fbx`（31 骨，含 3 根 `_notused`）；
+而**运行时骨架**在 `Modules/Native/AssetPackages/skeletons.tpac` 里、
+名字都叫 `bip01_notused`（28 骨，多个 guid 各一份）。
+用 `mbtool skeljson <tpac> <guid> out.json` 导出，`rest` 字段是 4×4 **列主序**矩阵
+（要 `.reshape(4,4).T`），平移是**相对父骨的局部量**，沿链相乘才是绝对位置。
+已固化成 `game_skeleton_rest.json`（28 根骨的 local + absolute）。
+
+**轴向约定**（用"骨骼矩阵哪一列指向骨轴"判定，骨架的关节位置与 rest 旋转同在游戏空间，可直接比）：
+骨架资产侧 **X 列沿骨轴**（20/23 根一致，pelvis 例外用 Z 列）。
+而动画 `q(0)` 侧统计为 X 7 / Y 4 / Z 12 —— **混乱是预期的**（它不是 bind pose）。
+所以不能拿 `q(0)` 反推约定。
+
+**仍未解决**：换成骨架 rest 当基准后，手到中线的距离已正常（281/309mm），
+但**手仍举高**（约 1756mm，高于头 1560mm，多出约 90°）。
+即"约定"这一层还没接对，下一步要标定每根骨 X/Y/Z 列与骨轴的对应关系。
+可用的判据仍是"手高应明显低于头高、水平距离落在 150~350mm"。
+
 ## 10. 文件清单
 
 **工具（本目录）**
@@ -272,6 +312,7 @@ AnimationClip  inventory_idle  dur=15.000  anim=ff08c5be-…  flags=[cyclic]
 | `selftest_anim.py` | 验证动画解包质量：四元数归一化 / 相邻关键帧跳变 / 采样帧间位移（"抽搐"就是靠它定位到 `t=0` 是 rest 帧的） |
 | `selftest_gl_refresh.py` | 验证 pyglet 1.5 的刷新机制（`invalid=True` vs 手动 flip vs 不请求，三种写法实测对照） |
 | `selftest_ui.py` / `selftest_buttons.py` | 无头点一遍按钮回调与命中测试（新写的交互路径无法交互测试，靠它们把关） |
+| `game_skeleton_rest.json` | 运行时骨架（`bip01_notused`，28 骨）的 rest：local + absolute 4×4。§9.6 的基准就取自它 |
 | `selftest_bones.py` | 逐角色验证"骨骼叠加"真的画出来了（A/B 差异像素判据，见 §9 那一行） |
 | `probe_anim_space.py` / `solve_anim_*.py` | 当初解"动画四元数约定"的探针（留档） |
 | `diag_lbs.py` / `diag_anim_bones.py` | 按骨/按材质组定位"是哪根骨炸了" |

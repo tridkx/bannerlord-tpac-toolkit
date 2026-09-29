@@ -832,12 +832,24 @@ class Viewer:
                     glAlphaFunc(GL_GREATER, float(at))
                 else:
                     glDisable(GL_ALPHA_TEST)
-                if g.get("blend"):
+                # ★★★ 镂空（alphaTest>0）与半透明（blend）是**互斥**的两种模式：
+                #   alphaTest 的语义是"要么完全不透明、要么完全透明"（硬边），
+                #   再叠一层 alpha 混合就会把发丝变成半透明 —— 症状正是
+                #   "刘海能透过去看到模型内壳，但其他头发没事"（其他发片的
+                #   贴图 alpha 是干净的 0/255，混不混看不出差别；刘海的贴图
+                #   带中间 alpha 值，一混就露馅）。
+                #   骑砍的发丝材质两个标志同时带着（alphaTest=0.2745 +
+                #   blendMode=factor），这里按"镂空优先"处理。
+                if float(g.get("alpha_test") or 0) > 0:
+                    glDisable(GL_BLEND)
+                    glDepthMask(1)          # 硬边材质照常写深度
+                elif g.get("blend"):
                     glEnable(GL_BLEND)
                     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                    glDepthMask(0)
+                    glDepthMask(0)          # 真半透明才关深度写入
                 else:
                     glDisable(GL_BLEND)
+                    glDepthMask(1)
                 glColor3f(1.0, 1.0, 1.0)
             else:
                 glDisable(GL_TEXTURE_2D)
