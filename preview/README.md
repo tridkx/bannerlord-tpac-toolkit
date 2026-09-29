@@ -359,6 +359,7 @@ rest（**A-pose，手在 x=0.650**），游戏骨架的 bind pose 则是**手臂
 | `selftest_gl_refresh.py` | 验证 pyglet 1.5 的刷新机制（`invalid=True` vs 手动 flip vs 不请求，三种写法实测对照） |
 | `selftest_ui.py` / `selftest_buttons.py` | 无头点一遍按钮回调与命中测试（新写的交互路径无法交互测试，靠它们把关） |
 | `game_skeleton_rest.json` | 运行时骨架（`bip01_notused`，28 骨）的 rest：local + absolute 4×4。§9.6 的基准就取自它 |
+| `check_pack.py` | **体检工具**：对任意 `.tpac` 报"能不能正常预览、哪几项会退化"（列 §9 里踩过的坑）。`--export` 复用已导出产物、`--scan <Modules>` 批量扫。这是"泛化能力"的可执行答案 |
 | `selftest_bones.py` | 逐角色验证"骨骼叠加"真的画出来了（A/B 差异像素判据，见 §9 那一行） |
 | `probe_anim_space.py` / `solve_anim_*.py` | 当初解"动画四元数约定"的探针（留档） |
 | `diag_lbs.py` / `diag_anim_bones.py` | 按骨/按材质组定位"是哪根骨炸了" |
