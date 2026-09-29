@@ -1,0 +1,88 @@
+{
+  "inv_movements": {
+    "file": "inv_movements.json",
+    "animName": "anim_inventory_movements",
+    "guid": "bb0014b7-4d79-4cf7-a5c7-28c0cff3914a",
+    "tEnd": 300,
+    "animDuration": 228,
+    "clips": [
+      {
+        "name": "inventory_cloth_equip",
+        "duration": 5.0,
+        "flags": [],
+        "priority": 10
+      },
+      {
+        "name": "inventory_glove_equip",
+        "duration": 5.0,
+        "flags": [],
+        "priority": 10
+      }
+    ],
+    "clip": "inventory_cloth_equip",
+    "clipDuration": 5.0,
+    "clipFlags": [],
+    "clipPriority": 10,
+    "cyclic": false,
+    "fps": 60.0,
+    "seconds": 5.0
+  },
+  "inventory_idle": {
+    "file": "inventory_idle.json",
+    "animName": "anim_inventory_idle",
+    "guid": "ff08c5be-28ad-45ab-97d2-3f1a4216b1bf",
+    "tEnd": 1267,
+    "animDuration": 630,
+    "clips": [
+      {
+        "name": "inventory_idle",
+        "duration": 15.0,
+        "flags": [
+          "cyclic"
+        ],
+        "priority": 0
+      },
+      {
+        "name": "inventory_idle_start",
+        "duration": 15.0,
+        "flags": [],
+        "priority": 0
+      }
+    ],
+    "clip": "inventory_idle",
+    "clipDuration": 15.0,
+    "clipFlags": [
+      "cyclic"
+    ],
+    "clipPriority": 0,
+    "cyclic": true,
+    "fps": 84.46666666666667,
+    "seconds": 15.0
+  },
+  "walk_barmaid": {
+    "file": "walk_barmaid.json",
+    "animName": "anim_walk_barmaid",
+    "guid": "6e108ff4-9d8a-4b3b-8db8-ff4876dc4011",
+    "tEnd": 40,
+    "animDuration": 39,
+    "clips": [
+      {
+        "name": "anim_barmaid_walk_forward",
+        "duration": 1.3,
+        "flags": [
+          "make_walk_sound"
+        ],
+        "priority": 0
+      }
+    ],
+    "clip": "anim_barmaid_walk_forward",
+    "clipDuration": 1.3,
+    "clipFlags": [
+      "make_walk_sound"
+    ],
+    "clipPriority": 0,
+    "cyclic": false,
+    "fps": 30.769230769230766,
+    "seconds": 1.3
+  }
+}

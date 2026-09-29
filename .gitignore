@@ -8,16 +8,13 @@ build/
 *.tpac
 
 # ---- 离线预览器（preview/）----
-# ★ 游戏原版数据不进仓库（版权）：骨架导出与动画 dump 都在本地生成，
-#   生成方法见 preview/README.md §3/§4。工具代码本身照常提交。
-preview/bl_skeleton.json
-preview/anims/*.json
-preview/anims/clips.txt
-preview/anims/index.json
-# 本地验证产物 / 审查现场 / 缓存
+# 骨架导出与动画 dump **照常提交**（骑砍2 的 mod 生态对这些原版数据的再分发很宽松，
+# 有了它们工具才开箱可用）。要自己重新生成见 preview/README.md §3/§4。
+# 不进仓库的只有本地跑出来的临时产物：
 preview/_verify/
 preview/_review/
 preview/_review2/
 preview/__pycache__/
 preview/shot_*.png
 preview/record_*/
+preview/*/shot_*.png
