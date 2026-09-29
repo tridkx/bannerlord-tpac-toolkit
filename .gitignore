@@ -18,3 +18,6 @@ preview/__pycache__/
 preview/shot_*.png
 preview/record_*/
 preview/*/shot_*.png
+
+# 中间产物（骨架 dump 等），可再生，不入库
+preview/_tmp/
