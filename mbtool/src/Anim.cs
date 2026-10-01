@@ -67,8 +67,9 @@ namespace MbTool
 			{
 				if (filter != null && c.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
 				// flags/priority 一并打出来：离线预览器要用 clip 的 duration 当
-				// "这段动画真正播多久"的依据（见 preview/build_anim_index.py），
+				// "这段动画真正播多久"的依据（速率 = 有效跨度 / duration），
 				// 用 cyclic 决定循环播放时要不要跳过重复的首尾帧。
+				// 消费方：bannerlord-anim-previewer 的 baker/actions.py。
 				Console.WriteLine($"AnimationClip  {c.Name,-56} dur={c.Duration,-8:F3} anim={c.Animation} flags=[{string.Join(",", c.Flags)}] prio={c.Priority}");
 				n++;
 			}

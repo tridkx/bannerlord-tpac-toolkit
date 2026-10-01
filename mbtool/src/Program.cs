@@ -87,7 +87,7 @@ namespace MbTool
   skeljson <skeletons.tpac> <name> <out.json>
                                        dump skeleton (bone names / parents / rest) to JSON
 
-  -- whole-mod export (for the offline previewer) --
+  -- whole-mod export (consumed by bannerlord-anim-previewer) --
   exportmod <pack.tpac> <outDir> [lod] export meshes + materials + textures(PNG)
                                        as a self-contained folder
 ");

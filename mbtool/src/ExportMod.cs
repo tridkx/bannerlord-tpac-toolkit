@@ -25,9 +25,9 @@ namespace MbTool
 	/// 分工
 	/// ----
 	/// 这里只负责"把 tpac 里的字节原样掏出来"（几何二进制 + 清单 JSON + 贴图原始
-	/// BC 数据）。组装成预览器格式（npz / PNG）由 Python 侧
-	/// `preview/import_mod.py` 做 —— 那边有现成的 BC 解码器（py/bcencode.py）
-	/// 和 PIL，比在 C# 里重写一遍可靠。
+	/// BC 数据）。解码 BC / 组装成可渲染格式由 Python 侧做 —— 消费方是配套项目
+	/// bannerlord-anim-previewer（baker/geometry.py 与 baker/material.py），
+	/// 那边有现成的 BC 解码器（本仓库 py/bcencode.py）和 PIL，比在 C# 里重写一遍可靠。
 	///
 	/// 用法
 	/// ----

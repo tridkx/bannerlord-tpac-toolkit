@@ -1,7 +1,11 @@
 # mb-tools —— 《骑马与砍杀2：霸主》资产包（`.tpac`）逆向工具集
 
 一套用来**读写、检查、生成** Bannerlord `.tpac` 资产包的工具，以及配套的格式说明。
-包含一个 C# 命令行工具、若干 Python 逆向/诊断脚本、一个**带动画的离线预览器**，和几个 Windows 辅助脚本。
+包含一个 C# 命令行工具、若干 Python 逆向/诊断脚本，和几个 Windows 辅助脚本。
+
+> 配套的**离线动画预览器**（把游戏原版动画套到皮套网格上、不开游戏就能看实机形态）
+> 已经独立成项目：**https://github.com/tridkx/bannerlord-anim-previewer**
+> 它直接消费本工具集的 `exportmod` / `skeljson` / `anim` 三条命令。
 
 > 面向的场景：想用代码（而不是 Modding Kit 的 GUI 导入流程）离线、可重复地生成模型/贴图/材质资产包，
 > 或者想检查官方编辑器产出的包到底写了什么。
@@ -19,15 +23,6 @@ mbtool/          C# 命令行工具：读取 / 检查 / 构建 / 往返验证 .t
   src/XxHash64.cs  xxh64 实现（含 metadata 校验和封装）
   src/LZ4Block.cs  LZ4 块编解码（不依赖第三方库）
   src/HalfCheck.cs half-float 自检
-preview/         ★ 离线动画预览器（把游戏原版动画套到皮套网格上，不开游戏就能看动起来）
-  mbpreview_gui.py    GUI：实时播放 + 按钮条/时间轴，可打开任意 .tpac
-  mb-preview.py       CLI：一条命令出序列图 + GIF
-  anim_pose.py        核心：套游戏动画 → 逐帧 npz（LBS）
-  import_mod.py       把 exportmod 的产物组装成预览器格式（npz + PNG + texmap）
-  project_map.py      从工程脚本解析「源材质名 → 贴图」与丢弃材质清单
-  build_anim_index.py 用 AnimationClip.duration 算出动画的真实播放速率
-  anims/              原版动画 JSON + 时长索引（与工程无关，跟着工具走）
-  README.md           ★ 用法 / 验收结论 / 踩坑清单（要看预览器就从这个文件进）
 py/              Python 工具（独立实现，用于交叉验证 C# 结果）
   tpac.py              独立的 .tpac 读取器（可当库用）
   walk_mesh.py         逐字段解析网格元数据
@@ -150,20 +145,20 @@ $MB animlist "$GAME/animations.tpac" idle          # 按名字找动画（附带
 $MB cliplist "$GAME/animation_clips.tpac" idle     # 列出剪辑（dur/flags/priority + 它引用的动画 guid）
 $MB clip     "$GAME/animation_clips.tpac" inventory_cloth_equip
 
-# dump 成 JSON（给离线预览器用；GUI 会自动扫 preview/anims/ 目录）
-$MB anim     "$GAME/animations.tpac" anim_inventory_idle preview/anims/inventory_idle.json \
+# dump 成 JSON（离线预览器也走同一条命令，见文末「配套项目」）
+$MB anim     "$GAME/animations.tpac" anim_inventory_idle out/inventory_idle.json \
              "$GAME/skeletons.tpac"
-$MB skeljson "$GAME/skeletons.tpac" human_skeleton preview/bl_skeleton.json
+$MB skeljson "$GAME/skeletons.tpac" human_skeleton out/bl_skeleton.json
 
 # 从**任意 .tpac** 导出网格 + 材质 + 贴图原始数据（自包含目录）
 $MB exportmod <mod>/AssetPackages/pack0.tpac out/exportmod
 # 几何是自描述的二进制（顶点/法线/UV/顶点色/骨骼索引/骨骼权重/索引），
-# 贴图是原始 BC 字节 + mip 表；组装与解码见 preview/import_mod.py
+# 贴图是原始 BC 字节 + mip 表 —— 解码与渲染见配套的离线预览器项目。
 ```
 
-> `exportmod` 的用途不只是"方便"：预览器原先只能吃工程中间产物 `work/posed/*.npz`，
-> 于是**离线验证的不是最终交付的那个文件**。这条命令让预览器改成从最终 `.tpac` 倒推
-> （打包环节的权重量化、`.mgeo` 同名覆盖这类问题只有这样才看得见）。
+> `exportmod` 的用途不只是"方便"：**它让离线验证能针对最终交付的那个 `.tpac`**，
+> 而不是工程中间产物 —— 打包环节的权重量化、`.mgeo` 同名覆盖这类问题只有这样才看得见。
+> 配套预览器的几何/材质/贴图就是直接吃它的产物。
 
 ### 构建资产包
 
@@ -357,3 +352,15 @@ $env:CAP_PROC = "blender"; .\win\ui.ps1 -out blender.png
 - `setup/patch_tpactool.py` 用于给 [TpacTool](https://github.com/szszss/TpacTool)（MIT，© szszss）打补丁，
   请自行获取上游源码；本仓库不重复分发其代码。
 - 工具仅用于个人学习与模组制作，请遵守相关游戏的使用条款。
+
+---
+
+## 配套项目
+
+**骑砍2 皮套 Mod 动画预览器** —— https://github.com/tridkx/bannerlord-anim-previewer
+
+不开游戏就能看皮套 mod 在**游戏原版动画**下的实机形态：浏览器界面给人类用，
+`shot` / `check` / `inspect` 三条子命令给 AI 用（无头出图 + 动画形变自动巡检）。
+
+它消费本工具集的三条命令：`exportmod`（几何/材质/贴图）、`skeljson`（骨架 bind pose）、
+`anim`（动画关键帧）。本仓库不再自带预览器实现。
