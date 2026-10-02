@@ -344,7 +344,7 @@ namespace MbTool
 
 		private static int CmdMesh(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			var mm = pkg.Items.OfType<Metamesh>().FirstOrDefault(m => m.Name == a[2]);
 			if (mm == null)
 			{
@@ -392,9 +392,17 @@ namespace MbTool
 
 		private static int CmdSkel(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			var skeletons = pkg.Items.OfType<Skeleton>().ToList();
 			if (skeletons.Count == 0) { Console.WriteLine("no skeleton in this package"); return 1; }
+			// 没指定骨架名时只列清单：大包里只有名字是有用信息，逐骨架 dump 骨骼表会刷屏
+			bool listOnly = a.Length <= 2;
+			if (listOnly)
+			{
+				foreach (var s in skeletons)
+					Console.WriteLine($"Skeleton '{s.Name}' guid={s.Guid} geometry={s.GeometryGuid}");
+				return 0;
+			}
 			foreach (var s in skeletons)
 			{
 				if (a.Length > 2 && s.Name != a[2]) continue;
@@ -415,7 +423,7 @@ namespace MbTool
 
 		private static int CmdMat(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			var m = pkg.Items.OfType<Material>().FirstOrDefault(x => x.Name == a[2]);
 			if (m == null) { Console.WriteLine("material not found: " + a[2]); return 1; }
 			Console.WriteLine($"Material '{m.Name}' guid={m.Guid} version={m.Version}");
@@ -442,7 +450,7 @@ namespace MbTool
 		/// <summary>一次性列出包内所有材质的渲染状态参数（找"透明材质长什么样"用）</summary>
 		private static int CmdMatAll(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			foreach (var m in pkg.Items.OfType<Material>())
 			{
 				var e = m.ExtraMaterialSettings;
@@ -456,7 +464,7 @@ namespace MbTool
 
 		private static int CmdTex(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			var t = pkg.Items.OfType<Texture>().FirstOrDefault(x => x.Name == a[2]);
 			if (t == null) { Console.WriteLine("texture not found: " + a[2]); return 1; }
 			Console.WriteLine($"Texture '{t.Name}' guid={t.Guid} version={t.Version}");
@@ -475,7 +483,7 @@ namespace MbTool
 
 		private static int CmdExportMesh(string[] a)
 		{
-			var pkg = Open(a[1], true);
+			var pkg = Open(a[1]);   // lazy: 按需加载，GB 级 mod 包整包预加载会 OOM
 			var mm = pkg.Items.OfType<Metamesh>().FirstOrDefault(x => x.Name == a[2]);
 			if (mm == null) { Console.WriteLine("metamesh not found: " + a[2]); return 1; }
 

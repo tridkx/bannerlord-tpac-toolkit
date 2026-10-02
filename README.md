@@ -25,6 +25,8 @@ mbtool/          C# 命令行工具：读取 / 检查 / 构建 / 往返验证 .t
   src/HalfCheck.cs half-float 自检
 py/              Python 工具（独立实现，用于交叉验证 C# 结果）
   tpac.py              独立的 .tpac 读取器（可当库用）
+  tpac_skel.py         ★ 从任意 .tpac 按名字 dump 骨架，并能逐骨对比两套骨架
+                       （--list / --json / --vs；只 seek 文件头，GB 级 mod 包毫秒级）
   walk_mesh.py         逐字段解析网格元数据
   walk_texture.py      逐字段解析贴图元数据
   checksum_hunt.py     校验和算法搜寻

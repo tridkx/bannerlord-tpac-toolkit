@@ -112,6 +112,18 @@ namespace MbTool
 				}
 			}
 
+			// 骨架先于网格：新增种族要用自定义骨架（action_sets.xml 按 skeleton 名引用）
+			if (spec.TryGetProperty("skeletons", out var skels))
+			{
+				foreach (var s in skels.EnumerateArray())
+				{
+					var sk = BuildSkeleton(ctx, s);
+					ctx.Package.Items.Add(sk);
+					ctx.Log.Add($"  skeleton {sk.Name,-31} bones={sk.Definition.Data.Bones.Count} " +
+								$"metaVersion={sk.MetaVersion} geom={sk.GeometryGuid}");
+				}
+			}
+
 			if (spec.TryGetProperty("meshes", out var meshes))
 			{
 				foreach (var m in meshes.EnumerateArray())
@@ -130,6 +142,93 @@ namespace MbTool
 			Console.WriteLine($"wrote {output} ({new FileInfo(output).Length / 1048576.0:F1} MB, {ctx.Package.Items.Count} assets)");
 			foreach (var l in ctx.Log) Console.WriteLine(l);
 			return 0;
+		}
+
+		// ---------------------------------------------------------------- skeleton
+		/// <summary>
+		/// 构造骨架资产。★ 与 mesh / material 同一策略：从原版模板克隆，保住
+		/// MetaVersion / GeometryGuid / **骨轴朝向** 这些"语义未完全弄清"的字段，
+		/// 只替换我们真正要改的数据 —— 这里是每根骨的 RestFrame。
+		///
+		/// RestFrame 是**局部矩阵**（行主序 16 个 float，行向量约定
+		/// W_child = L_child * W_parent）。矩阵由 Python 侧算好写进 spec，
+		/// C# 侧只做填充 —— 便于用 numpy 审计，也让这里保持无逻辑。
+		///
+		/// 引擎按**名字**索引骨架（Skeleton.GetBoneIndexFromName），因此
+		/// 资产名 Name 与定义名 Definition.Data.Name 必须一致。
+		/// </summary>
+		private static Skeleton BuildSkeleton(Ctx ctx, JsonElement spec)
+		{
+			var tmpl = ctx.Template<Skeleton>(spec.GetProperty("template").GetString());
+			var sk = (Skeleton) tmpl.Clone();
+			sk.Name = spec.GetProperty("name").GetString();
+			sk.Guid = ctx.NewGuid();
+			// ★ TpacTool 的 Skeleton.Clone() 漏拷 MetaVersion（会留 0 = 版本不符）
+			sk.MetaVersion = tmpl.MetaVersion;
+
+			if (sk.Definition?.Data == null)
+				throw new Exception($"skeleton template '{tmpl.Name}' 没有 Definition 数据段");
+			var def = sk.Definition.Data;
+			def.Name = sk.Name;
+
+			var bonesSpec = spec.GetProperty("bones").EnumerateArray().ToArray();
+			var nodes = new List<BoneNode>(bonesSpec.Length);
+			foreach (var b in bonesSpec)
+			{
+				var a = b.GetProperty("rest").EnumerateArray().Select(x => x.GetSingle()).ToArray();
+				if (a.Length != 16)
+					throw new Exception($"skeleton '{sk.Name}': bone '{b.GetProperty("name").GetString()}' " +
+										$"的 rest 需要 16 个元素，实得 {a.Length}");
+				nodes.Add(new BoneNode
+				{
+					Name = b.GetProperty("name").GetString(),
+					RestFrame = new Matrix4x4(a[0], a[1], a[2], a[3],
+											  a[4], a[5], a[6], a[7],
+											  a[8], a[9], a[10], a[11],
+											  a[12], a[13], a[14], a[15]),
+				});
+			}
+			for (int i = 0; i < nodes.Count; i++)
+			{
+				int p = bonesSpec[i].GetProperty("parent").GetInt32();
+				if (p < 0)
+					continue;
+				if (p >= nodes.Count)
+					throw new Exception($"skeleton '{sk.Name}': bone[{i}] parent={p} 越界");
+				if (p >= i)
+					throw new Exception($"skeleton '{sk.Name}': bone[{i}] parent={p} 违反拓扑序（父必须在子之前）");
+				nodes[i].Parent = nodes[p];
+			}
+			def.Bones.Clear();
+			def.Bones.AddRange(nodes);
+
+			// ★ 数据段必须走 ConsumeDataSegments 注册进 TypelessDataSegments。
+			//   TpacTool 的 Skeleton.Clone() 只给 Definition 属性赋了值（auto-property），
+			//   并没有把它登记到段列表 —— 只靠 Clone 保存会写出 segs=0，
+			//   `mbtool skel` 回读是 "(no definition data)"，骨架数据整个丢失。
+			//   loader 自身字段（OwnerGuid / UnknownUint / UnknownUlong / UserData）
+			//   也要从模板拷，否则段的描述不完整。
+			var segs = new List<AbstractExternalLoader>();
+			var ld = new ExternalLoader<SkeletonDefinitionData>(def);
+			ld.OwnerGuid = sk.Guid;
+			ld.UnknownUint = tmpl.Definition.UnknownUint;
+			ld.UnknownUlong = tmpl.Definition.UnknownUlong;
+			foreach (var kv in tmpl.Definition.UserData)
+				ld.UserData[kv.Key] = kv.Value;
+			segs.Add(ld);
+
+			if (tmpl.UserData?.Data != null)
+			{
+				var ud = new ExternalLoader<SkeletonUserData>(tmpl.UserData.Data);
+				ud.OwnerGuid = sk.Guid;
+				ud.UnknownUint = tmpl.UserData.UnknownUint;
+				ud.UnknownUlong = tmpl.UserData.UnknownUlong;
+				foreach (var kv in tmpl.UserData.UserData)
+					ud.UserData[kv.Key] = kv.Value;
+				segs.Add(ud);
+			}
+			sk.ConsumeDataSegments(segs.ToArray());
+			return sk;
 		}
 
 		// ------------------------------------------------------------------ texture
